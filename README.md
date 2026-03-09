@@ -1,37 +1,79 @@
 # Community API
 
-ASP.NET Web API för ett community med blogginlägg, användare, kategorier och kommentarer.
-Byggd med .NET 10, Entity Framework Core och SQL Server. Dokumenterad med Swagger.
+Ett REST API för en community-plattform med blogginlägg, kommentarer, kategorier och användarhantering. Byggt med ASP.NET Core 9, Entity Framework Core, ASP.NET Core Identity och JWT-autentisering.
+
+---
+
+## Teknikstack
+
+| Teknologi | Användning |
+|-----------|------------|
+| **ASP.NET Core Web API (.NET 9)** | REST API och affärslogik |
+| **Entity Framework Core** | ORM, migrationer och databasåtkomst |
+| **SQL Server** | Relationsdatabas |
+| **ASP.NET Core Identity** | Användarhantering och lösenordshashning |
+| **JWT (JSON Web Tokens)** | Stateless autentisering |
+| **AutoMapper** | Mappning mellan entiteter och DTO:er |
+| **Swagger / Swashbuckle** | Interaktiv API-dokumentation med JWT-stöd |
+
+---
+
+## Arkitektur
+
+Projektet följer en tydlig lagerstruktur med Service-Repository-mönstret:
+
+```
+community-api/
+├── Controllers/            → HTTP-endpoints, validering och statuskoder
+├── Core/
+│   ├── Interfaces/         → Kontrakt för services (IUserService, IPostService m.fl.)
+│   └── Services/           → Affärslogik + ServiceResult<T> returnmönster
+└── Data/
+    ├── Entities/           → Databasmodeller (AppUser, Post, Comment, Category)
+    ├── Repos/              → Databasåtkomst via Entity Framework
+    ├── Interfaces/         → Kontrakt för repos (IPostRepo, ICommentRepo)
+    ├── Profiles/           → AutoMapper-mappningar
+    ├── DTO/                → Dataöverföringsobjekt
+    └── AppDbContext.cs     → EF Core databaskonfiguration
+```
+
+Alla serviceoperationer returnerar `ServiceResult<T>` — ett generiskt svarsobjekt med antingen data vid lyckad operation, eller felmeddelanden vid misslyckad. Controllers kastar aldrig exceptions för förväntade felfall.
 
 ---
 
 ## Kom igång
 
-### 1. Krav
-- .NET 10 SDK
+### Krav
+- .NET 9 SDK
 - SQL Server (lokalt eller via Azure)
-- Postman eller webbläsare för Swagger
+- Valfri REST-klient (Swagger UI, Postman, etc.)
 
-### 2. Konfigurera databas
+### 1. Konfigurera databas
 
-Öppna `appsettings.json` och ersätt connection string:
+Öppna `appsettings.json` och ange din connection string:
 
 ```json
-"Default": "Server=YOUR_SERVER;Database=CommunityDb;User Id=YOUR_USER;Password=YOUR_PASSWORD;TrustServerCertificate=True;"
+"ConnectionStrings": {
+  "Default": "Server=localhost;Database=CommunityDb;Trusted_Connection=True;TrustServerCertificate=True;"
+}
 ```
 
-**Exempel för lokal SQL Server:**
-```json
-"Default": "Server=localhost;Database=CommunityDb;Trusted_Connection=True;TrustServerCertificate=True;"
-```
-
-**Exempel för SQL Server Express:**
+**För SQL Server Express:**
 ```json
 "Default": "Server=.\\SQLEXPRESS;Database=CommunityDb;Trusted_Connection=True;TrustServerCertificate=True;"
 ```
 
-> Databasen och tabellerna skapas automatiskt när appen startas första gången.
-> Kategorierna (Träning, Mode, Hälsa, Mat, Resor) seedas automatiskt.
+### 2. Konfigurera JWT
+
+I `appsettings.json`, ange en hemlig nyckel för JWT-signering:
+
+```json
+"JwtSettings": {
+  "SecretKey": "DIN_HEMLIGA_NYCKEL_MINST_32_TECKEN",
+  "Issuer": "CommunityApi",
+  "Audience": "CommunityClient"
+}
+```
 
 ### 3. Starta API:et
 
@@ -39,83 +81,73 @@ Byggd med .NET 10, Entity Framework Core och SQL Server. Dokumenterad med Swagge
 dotnet run
 ```
 
-Swagger UI öppnas på: `http://localhost:{PORT}/swagger`
+> Databasen skapas och migreras automatiskt vid uppstart.
+> Kategorierna **Träning**, **Mode**, **Hälsa**, **Mat** och **Resor** seedas automatiskt om databasen är tom.
+
+Swagger UI finns på: `http://localhost:{PORT}/swagger`
 
 ---
 
-## Endpoints
+## API-endpoints
+
+### Autentisering
+
+| Metod | Endpoint | Beskrivning | Auth |
+|-------|----------|-------------|------|
+| POST | `/api/auth/register` | Registrera ny användare | Nej |
+| POST | `/api/auth/login` | Logga in — returnerar JWT-token | Nej |
+
+#### Registrera användare — `POST /api/auth/register`
+```json
+{
+  "username": "anna",
+  "email": "anna@mail.com",
+  "password": "Hemligt123!",
+  "firstName": "Anna",
+  "lastName": "Svensson"
+}
+```
+
+#### Logga in — `POST /api/auth/login`
+```json
+{
+  "username": "anna",
+  "password": "Hemligt123!"
+}
+```
+**Svar:**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+> Använd token i `Authorization: Bearer <token>` headern för alla skyddade endpoints.
+
+---
 
 ### Användare
 
-| Metod | URL | Beskrivning | Auth |
-|---|---|---|---|
-| POST | `/api/users` | Registrera ny användare | Nej |
-| POST | `/api/users/login` | Logga in, returnerar userId | Nej |
-| PUT | `/api/users/{id}` | Uppdatera användare | Nej |
-| DELETE | `/api/users/{id}` | Ta bort användare | Nej |
-
-#### POST `/api/users` — Registrera
-```json
-{
-  "username": "anna",
-  "password": "hemligt123",
-  "email": "anna@mail.com"
-}
-```
-**Svar:**
-```json
-{
-  "userId": 1,
-  "username": "anna",
-  "email": "anna@mail.com"
-}
-```
-
-#### POST `/api/users/login` — Logga in
-```json
-{
-  "username": "anna",
-  "password": "hemligt123"
-}
-```
-**Svar:**
-```json
-{
-  "userId": 1,
-  "username": "anna"
-}
-```
-> Spara `userId` — det används i alla anrop som kräver inloggning.
-
-#### PUT `/api/users/{id}` — Uppdatera
-```json
-{
-  "username": "anna2",
-  "email": "ny@mail.com",
-  "password": "nyttlösenord"
-}
-```
-> Alla fält är valfria. Skicka bara de du vill uppdatera.
-
-#### DELETE `/api/users/{id}` — Ta bort
-Ingen body. Returnerar `204 No Content`.
+| Metod | Endpoint | Beskrivning | Auth |
+|-------|----------|-------------|------|
+| PUT | `/api/user` | Uppdatera din profil | JWT |
+| DELETE | `/api/user?id={id}` | Ta bort användare | Nej |
 
 ---
 
 ### Kategorier
 
-| Metod | URL | Beskrivning |
-|---|---|---|
-| GET | `/api/categories` | Lista alla kategorier |
+| Metod | Endpoint | Beskrivning | Auth |
+|-------|----------|-------------|------|
+| GET | `/api/category` | Lista alla kategorier | Nej |
 
-#### GET `/api/categories`
+**Svar:**
 ```json
 [
-  { "categoryId": 1, "name": "Träning" },
-  { "categoryId": 2, "name": "Mode" },
-  { "categoryId": 3, "name": "Hälsa" },
-  { "categoryId": 4, "name": "Mat" },
-  { "categoryId": 5, "name": "Resor" }
+  { "categoryId": 1, "categoryName": "Träning" },
+  { "categoryId": 2, "categoryName": "Mode" },
+  { "categoryId": 3, "categoryName": "Hälsa" },
+  { "categoryId": 4, "categoryName": "Mat" },
+  { "categoryId": 5, "categoryName": "Resor" }
 ]
 ```
 
@@ -123,43 +155,26 @@ Ingen body. Returnerar `204 No Content`.
 
 ### Inlägg
 
-| Metod | URL | Beskrivning | Auth |
-|---|---|---|---|
-| GET | `/api/posts` | Lista alla inlägg | Nej |
-| GET | `/api/posts?title=xxx` | Sök på titel (delträff) | Nej |
-| GET | `/api/posts?categoryId=1` | Filtrera på kategori | Nej |
-| GET | `/api/posts/{id}` | Hämta enskilt inlägg med kommentarer | Nej |
-| POST | `/api/posts` | Skapa nytt inlägg | Ja (userId i body) |
-| PUT | `/api/posts/{id}` | Uppdatera inlägg (bara ägaren) | Ja (userId i body) |
-| DELETE | `/api/posts/{id}?userId={userId}` | Ta bort inlägg (bara ägaren) | Ja (userId i query) |
+| Metod | Endpoint | Beskrivning | Auth |
+|-------|----------|-------------|------|
+| GET | `/api/post` | Lista alla inlägg | Nej |
+| GET | `/api/post?title=xxx` | Sök på titel | Nej |
+| GET | `/api/post?categoryId=1` | Filtrera på kategori | Nej |
+| GET | `/api/post/{id}` | Hämta inlägg med kommentarer | Nej |
+| POST | `/api/post` | Skapa nytt inlägg | JWT |
+| PUT | `/api/post?postId={id}` | Uppdatera inlägg | JWT |
+| DELETE | `/api/post?postId={id}` | Ta bort inlägg | JWT |
 
-#### POST `/api/posts` — Skapa inlägg
+#### Skapa inlägg — `POST /api/post`
 ```json
 {
   "title": "Mitt träningspass",
   "text": "Idag sprang jag 10 km!",
-  "categoryId": 1,
-  "userId": 1
+  "categoryId": 1
 }
 ```
 
-#### PUT `/api/posts/{id}` — Uppdatera inlägg
-```json
-{
-  "title": "Uppdaterad titel",
-  "text": "Uppdaterad text",
-  "categoryId": 2,
-  "userId": 1
-}
-```
-> `userId` måste matcha inläggets ägare, annars `403 Forbidden`.
-> `title`, `text` och `categoryId` är valfria.
-
-#### DELETE `/api/posts/{id}?userId=1`
-Ingen body. Returnerar `204 No Content`.
-> `userId` måste matcha inläggets ägare, annars `403 Forbidden`.
-
-#### GET `/api/posts/{id}` — Svar med kommentarer
+#### Detaljerat inlägg med kommentarer — `GET /api/post/{id}`
 ```json
 {
   "postId": 1,
@@ -179,75 +194,59 @@ Ingen body. Returnerar `204 No Content`.
 }
 ```
 
+> Endast inläggets ägare kan uppdatera eller ta bort det — annars `403 Forbidden`.
+
 ---
 
 ### Kommentarer
 
-| Metod | URL | Beskrivning | Auth |
-|---|---|---|---|
-| POST | `/api/comments` | Lägg till kommentar | Ja (userId i body) |
-| GET | `/api/comments/post/{postId}` | Hämta kommentarer för ett inlägg | Nej |
+| Metod | Endpoint | Beskrivning | Auth |
+|-------|----------|-------------|------|
+| POST | `/api/comment` | Lägg till kommentar | JWT |
+| GET | `/api/comment/post/{postId}` | Hämta kommentarer för ett inlägg | Nej |
 
-#### POST `/api/comments` — Kommentera
+#### Kommentera — `POST /api/comment`
 ```json
 {
   "text": "Bra inlägg!",
-  "postId": 1,
-  "userId": 2
+  "postId": 1
 }
 ```
 > Man kan inte kommentera sina egna inlägg — returnerar `400 Bad Request`.
 
 ---
 
-## Typiskt testflöde i Postman
+## Typiskt testflöde
 
-1. **Registrera** användare 1 via `POST /api/users`
-2. **Registrera** användare 2 via `POST /api/users`
-3. **Logga in** med användare 1 via `POST /api/users/login` → spara `userId`
-4. **Hämta kategorier** via `GET /api/categories` → notera `categoryId`
-5. **Skapa inlägg** via `POST /api/posts` med userId från steg 3
-6. **Sök inlägg** via `GET /api/posts?title=xxx` eller `GET /api/posts?categoryId=1`
-7. **Kommentera** med användare 2 via `POST /api/comments`
-8. **Försök kommentera** med användare 1 (ägaren) → ska ge `400`
-9. **Uppdatera inlägg** med rätt userId → ska lyckas
-10. **Försök uppdatera** med fel userId → ska ge `403`
+1. **Registrera** två användare via `POST /api/auth/register`
+2. **Logga in** med användare 1 via `POST /api/auth/login` → kopiera JWT-token
+3. **Hämta kategorier** via `GET /api/category` → notera ett `categoryId`
+4. **Skapa inlägg** via `POST /api/post` med JWT-token i headern
+5. **Sök inlägg** via `GET /api/post?title=träning`
+6. **Logga in** med användare 2 och **kommentera** inlägget via `POST /api/comment`
+7. **Försök kommentera** med användare 1 (ägaren) → förväntat `400`
+8. **Uppdatera inlägg** med rätt token → ska lyckas
+9. **Försök uppdatera** med fel token → förväntat `403`
 
 ---
 
-## Projektstruktur
+## NuGet-paket
 
-```
-community-api/
-├── Controllers/
-│   ├── UserController.cs       # Registrering, login, uppdatering, borttagning
-│   ├── PostController.cs       # CRUD för inlägg + sökning
-│   ├── CategoryController.cs   # Lista kategorier
-│   └── CommentController.cs    # Skapa och läsa kommentarer
-├── Data/
-│   └── CommunityContext.cs     # EF Core DbContext
-├── Models/
-│   ├── User.cs
-│   ├── Post.cs
-│   ├── Category.cs
-│   └── Comment.cs
-├── appsettings.json            # Connection string (ändra här)
-├── Program.cs                  # App-konfiguration, CORS, Swagger, seed
-└── community-api.csproj        # Paketberoenden
-```
-
-## Paket
-
-| Paket | Användning |
-|---|---|
-| `Microsoft.EntityFrameworkCore.SqlServer` | EF Core med SQL Server |
-| `Microsoft.EntityFrameworkCore.Tools` | EF Core CLI-verktyg |
-| `Swashbuckle.AspNetCore` | Swagger-dokumentation |
+| Paket | Version | Användning |
+|-------|---------|------------|
+| `AutoMapper` | 14.0.0 | Entitet ↔ DTO-mappning |
+| `Microsoft.AspNetCore.Authentication.JwtBearer` | 9.0.6 | JWT-validering |
+| `Microsoft.AspNetCore.Identity.EntityFrameworkCore` | 9.0.6 | Användarhantering |
+| `Microsoft.EntityFrameworkCore.SqlServer` | 9.0.6 | SQL Server-driver |
+| `Microsoft.EntityFrameworkCore.Tools` | 9.0.6 | EF Core CLI |
+| `Swashbuckle.AspNetCore` | 8.1.1 | Swagger UI |
+| `Swashbuckle.AspNetCore.Annotations` | 8.1.1 | Swagger-annotationer |
 
 ---
 
 ## Säkerhet
 
-- Lösenord hashas med **SHA-256** innan de sparas i databasen
-- Klartext-lösenord lagras aldrig
+- Lösenord hashas av **ASP.NET Core Identity** (bcrypt med salt)
+- JWT-token valideras vid varje skyddat anrop
 - Ägarskydd: bara skaparen av ett inlägg kan uppdatera eller ta bort det
+- CORS är konfigurerat för att tillåta externa klienter
