@@ -1,0 +1,19 @@
+bin/
+obj/
+/packages/
+riderModule.iml
+/_ReSharper.Caches/
+.idea/
+
+# Känsliga konfigurationsfiler
+appsettings.Development.json
+appsettings.Production.json
+
+# Databasfiler
+*.db
+*.db-shm
+*.db-wal
+
+# Användarhemligheter
+*.user
+.vs/
